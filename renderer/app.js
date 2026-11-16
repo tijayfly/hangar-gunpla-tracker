@@ -153,7 +153,7 @@
       }
     }
     return `<a class="card" href="#/item/${it.id}" style="--card-accent:${accent}">
-      <div class="card-img${it.limited ? ' ltd' : ''}">${imgTag(it)}<span class="grade g-${it.grade}">${it.grade}</span>${it.scale ? `<span class="scale">${esc(it.scale)}</span>` : ''}${VIEW ? (it.limited ? '<span class="flag pill">LIMITED</span>' : '') : it.limited ? '<span class="flag">LIMITED</span>' : '<span class="flag std">STANDARD</span>'}</div>
+      <div class="card-img">${imgTag(it)}<span class="grade g-${it.grade}">${it.grade}</span>${it.scale ? `<span class="scale">${esc(it.scale)}</span>` : ''}${it.limited ? '<span class="flag">LIMITED</span>' : ''}</div>
       <div class="card-body"><div class="card-title">${esc(it.title)}${it.qty > 1 ? ` <span class="model-no">×${it.qty}</span>` : ''}</div><div class="card-series">${esc(it.series || '')}</div>${money}</div>
     </a>`;
   }
