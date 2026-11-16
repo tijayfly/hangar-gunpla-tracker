@@ -7,7 +7,6 @@ const Match = require('./lib/match.js');
 const Prices = require('./lib/prices.js');
 const Lookup = require('./lib/lookup.js');
 const GitHub = require('./lib/github.js');
-const RRP = require('./lib/rrp.js');
 
 const ROOT = __dirname;                               // running from source: data and exports live inside this folder (git-ignored)
 const DATA_DIR = app.isPackaged
@@ -26,10 +25,13 @@ function loadDB() {
   if (!fs.existsSync(DATA_FILE)) {
     fs.mkdirSync(IMG_DIR, { recursive: true });
     const seed = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'seed-collection.json'), 'utf8'));
-    seed.settings = { githubRepo: '', githubToken: '', githubPublish: false, jpyPerGbp: 200, fxUpdated: null, priceProvider: 'dummy', ebayAppId: '', ebayCertId: '', theme: 'system', ...seed.settings };
+    seed.settings = { githubRepo: '', githubToken: '', githubPublish: false, priceProvider: 'dummy', ebayAppId: '', ebayCertId: '', theme: 'system', ...seed.settings };
     saveDB(seed);
   }
   const db = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+  // RRP was removed from HANGAR: drop any leftover RRP fields (saved on the next change)
+  for (const it of db.items || []) { delete it.rrpJpy; delete it.rrpSource; delete it.rrpUrl; }
+  if (db.settings) { delete db.settings.jpyPerGbp; delete db.settings.fxUpdated; }
   return db;
 }
 function saveDB(db) {
@@ -102,16 +104,8 @@ async function refreshPrices(ids) {
   }
   saveDB(DB);
 }
-async function refreshFx() {
-  try {
-    const r = await fetch('https://api.frankfurter.app/latest?from=GBP&to=JPY', { signal: AbortSignal.timeout(8000) });
-    const j = await r.json();
-    if (j && j.rates && j.rates.JPY) { DB.settings.jpyPerGbp = j.rates.JPY; DB.settings.fxUpdated = j.date; saveDB(DB); }
-  } catch (e) { /* offline: keep stored rate */ }
-}
-
 // ---------- view-only export ----------
-const PRICE_FIELDS = ['paid', 'gift', 'rrpJpy', 'rrpSource', 'rrpUrl', 'current', 'targetPrice', 'whereToBuy', 'imageCandidates', 'original'];
+const PRICE_FIELDS = ['paid', 'gift', 'current', 'targetPrice', 'whereToBuy', 'imageCandidates', 'original'];
 function exportViewOnly() {
   const outImg = path.join(VIEW_DIR, 'images');
   fs.mkdirSync(outImg, { recursive: true });
@@ -155,57 +149,6 @@ async function browserImageSearch(q) {
   let res = await grab();
   for (let i = 0; !res.length && i < 6; i++) { await new Promise((r) => setTimeout(r, 700)); res = await grab(); }
   return res;
-}
-
-// ---------- RRP lookup (Bic Camera maker price, hidden window, one request at a time) ----------
-let rrpWin = null, rrpQueue = Promise.resolve();
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-async function rrpWindow() {
-  if (!rrpWin || rrpWin.isDestroyed()) {
-    rrpWin = new BrowserWindow({ show: false, width: 1200, height: 900, webPreferences: { sandbox: true, contextIsolation: true, partition: 'persist:rrp' } });
-  }
-  if (!/biccamera\.com/.test(rrpWin.webContents.getURL())) await rrpWin.loadURL('https://www.biccamera.com/bc/main/', { userAgent: UA });
-  return rrpWin;
-}
-async function bicSearch(win, q) {
-  // submit a real search form so Japanese text is sent in the site's own encoding
-  const nav = new Promise((res) => win.webContents.once('did-finish-load', res));
-  await win.webContents.executeJavaScript(`(() => { const f = document.createElement('form'); f.action = '/bc/category/'; f.method = 'get'; f.acceptCharset = 'Shift_JIS';
-    for (const [k, v] of [['q', ${JSON.stringify(q)}], ['sold_out_tp2', '2']]) { const i = document.createElement('input'); i.type = 'hidden'; i.name = k; i.value = v; f.appendChild(i); }
-    document.body.appendChild(f); f.submit(); return 1; })()`);
-  await Promise.race([nav, sleep(15000)]);
-  for (let i = 0; i < 12; i++) {
-    const list = await win.webContents.executeJavaScript(`(() => { const seen = new Set(), out = [];
-      for (const a of document.querySelectorAll('a.bcs_item')) { const t = (a.innerText || '').replace(/\s+/g, ' ').trim(); if (!t || seen.has(a.href)) continue; seen.add(a.href); out.push({ url: a.href.split('#')[0], title: t }); }
-      return out.slice(0, 12); })()`);
-    if (list.length || i > 5) return list;
-    await sleep(500);
-  }
-  return [];
-}
-async function bicProduct(win, url) {
-  return win.webContents.executeJavaScript(`(async () => { const r = await fetch(${JSON.stringify(url)}); const ct = r.headers.get('content-type') || '';
-    const enc = (ct.match(/charset=([\w-]+)/i) || [])[1] || 'utf-8'; return new TextDecoder(enc).decode(await r.arrayBuffer()); })()`);
-}
-function findRrp(item) {
-  const job = rrpQueue.then(async () => {
-    const win = await rrpWindow();
-    const queries = RRP.buildQueries(item);
-    let results = [], used = '';
-    for (const q of queries) {
-      results = await bicSearch(win, q); used = q;
-      if (results.length) break;
-      await sleep(1500);
-    }
-    const ranked = results.map((r) => ({ ...r, score: RRP.scoreResult(item, r.title) })).sort((a, b) => b.score - a.score).slice(0, 4);
-    for (const c of ranked) {
-      try { Object.assign(c, RRP.extractPrice(await bicProduct(win, c.url))); } catch (e) { c.priceJpy = null; }
-      await sleep(900);
-    }
-    return { query: used, candidates: ranked.filter((c) => c.priceJpy), source: 'Bic Camera' };
-  });
-  rrpQueue = job.catch(() => {});
-  return job;
 }
 
 // ---------- window ----------
@@ -252,7 +195,6 @@ app.whenReady().then(async () => {
   ipcMain.handle('item:remove', (_e, id) => { DB.items = DB.items.filter((x) => x.id !== id); saveDB(DB); return true; });
   ipcMain.handle('settings:save', (_e, s) => { DB.settings = { ...DB.settings, ...s }; saveDB(DB); return DB.settings; });
   ipcMain.handle('lookup:name', (_e, name) => Lookup.autofill(name));
-  ipcMain.handle('rrp:find', (_e, item) => findRrp(item));
   ipcMain.handle('lookup:images', (_e, q) => Lookup.imageSearch(q));
   ipcMain.handle('image:set', async (_e, id, img) => {
     const it = DB.items.find((x) => x.id === id); if (!it) return null;
@@ -273,7 +215,6 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle('images:cacheAll', () => cacheAll(win));
   ipcMain.handle('prices:refresh', async (_e, ids) => { await refreshPrices(ids); return DB; });
-  ipcMain.handle('fx:refresh', async () => { await refreshFx(); return DB.settings; });
   ipcMain.handle('export:view', async (_e, opts = {}) => {
     const r = exportViewOnly();
     const s = DB.settings;
@@ -296,13 +237,12 @@ app.whenReady().then(async () => {
 
   // first-run work in the background
   win.webContents.once('did-finish-load', async () => {
-    refreshFx();
     if (DB.items.some((i) => !i.current)) { await refreshPrices(); win.webContents.send('db-changed'); }
     cacheAll(win);
   });
 });
 app.on('window-all-closed', () => app.quit());
-app.on('before-quit', () => { for (const w of [searchWin, rrpWin]) if (w && !w.isDestroyed()) w.destroy(); });
+app.on('before-quit', () => { for (const w of [searchWin]) if (w && !w.isDestroyed()) w.destroy(); });
 
 // Developer self-test: HANGAR_SHOTS=<dir> captures screenshots of the main screens, then quits.
 if (process.env.HANGAR_SHOTS) {

@@ -1,7 +1,7 @@
 {
   "name": "hangar-gunpla-tracker",
   "productName": "HANGAR",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "HANGAR: a local Gunpla collection tracker (Electron)",
   "main": "main.js",
   "author": "TiJayFLY",
@@ -12,7 +12,7 @@
     "dist": "electron-builder --win portable"
   },
   "devDependencies": {
-    "electron": "^33.2.0",
+    "electron": "^45.3.3",
     "electron-builder": "^25.1.8"
   },
   "build": {
