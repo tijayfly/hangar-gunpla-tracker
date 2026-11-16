@@ -1,0 +1,23 @@
+const { contextBridge, ipcRenderer } = require('electron');
+
+contextBridge.exposeInMainWorld('hangar', {
+  mode: 'full',
+  getDB: () => ipcRenderer.invoke('db:get'),
+  paths: () => ipcRenderer.invoke('db:paths'),
+  saveItem: (item) => ipcRenderer.invoke('item:save', item),
+  deleteItem: (id) => ipcRenderer.invoke('item:delete', id),
+  removeItem: (id) => ipcRenderer.invoke('item:remove', id),
+  saveSettings: (s) => ipcRenderer.invoke('settings:save', s),
+  autofill: (name) => ipcRenderer.invoke('lookup:name', name),
+  findRrp: (item) => ipcRenderer.invoke('rrp:find', item),
+  imageSearch: (q) => ipcRenderer.invoke('lookup:images', q),
+  setImage: (id, img) => ipcRenderer.invoke('image:set', id, img),
+  setImageFromFile: (id) => ipcRenderer.invoke('image:file', id),
+  cacheImages: () => ipcRenderer.invoke('images:cacheAll'),
+  refreshPrices: (ids) => ipcRenderer.invoke('prices:refresh', ids),
+  refreshFx: () => ipcRenderer.invoke('fx:refresh'),
+  exportViewOnly: (opts) => ipcRenderer.invoke('export:view', opts),
+  openPath: (p) => ipcRenderer.invoke('open:path', p),
+  openUrl: (u) => ipcRenderer.invoke('open:url', u),
+  on: (ch, fn) => { const h = (_e, d) => fn(d); ipcRenderer.on(ch, h); return () => ipcRenderer.removeListener(ch, h); },
+});
