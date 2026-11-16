@@ -14,7 +14,10 @@ Unofficial fan-made tool, not affiliated with Bandai.
 - **View-only export:** writes a static page (no price data at all) to `view-only/`, and can publish it to a GitHub repo.
 - Light and dark mode, and a phone-friendly layout for the exported page.
 
-## Run it
+## Download (Windows)
+Grab **HANGAR-1.0.0-portable.exe** from the [latest release](https://github.com/tijayfly/hangar-gunpla-tracker/releases/latest). There's nothing to install: put it in its own folder and run it. Windows SmartScreen may warn because the app isn't code-signed; click **More info → Run anyway**.
+
+## Run from source
 You need [Node.js](https://nodejs.org) (LTS).
 
 ```
