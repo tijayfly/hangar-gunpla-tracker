@@ -34,7 +34,9 @@ To build a portable Windows .exe: `npm run dist` (output in `dist/`).
 - The first launch starts you with a few **example kits** (`data/seed-collection.json`). Delete them from each kit's page, or replace the seed file with your own before first launch.
 
 ## Current values
-Current values are **dummy placeholders** by default (derived from the price paid), so the app is usable out of the box. There's an eBay UK option in Settings (median asking price of new Buy It Now listings) that needs your own eBay developer App ID and Cert ID; it hasn't been tested against the live eBay API yet.
+Current values are **dummy placeholders** by default (derived from the price paid), so the app is usable out of the box. There's an eBay UK option in Settings (median asking price of new Buy It Now listings) that needs your own eBay developer **Production** App ID and Cert ID. **Test eBay keys** in Settings checks them, and if a refresh fails, the kit keeps its last value and shows the reason.
+
+To get Production keys, eBay asks you to handle Marketplace Account Deletion notifications. HANGAR stores no eBay user data, so choose the exemption ("not persisting eBay data") rather than setting up an endpoint.
 
 ## Publishing the view-only page to GitHub
 1. Create a repo for the page and turn on GitHub Pages (Settings → Pages → Deploy from branch → main, root).

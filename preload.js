@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('hangar', {
   setImageFromFile: (id) => ipcRenderer.invoke('image:file', id),
   cacheImages: () => ipcRenderer.invoke('images:cacheAll'),
   refreshPrices: (ids) => ipcRenderer.invoke('prices:refresh', ids),
+  testEbay: (appId, certId) => ipcRenderer.invoke('ebay:test', appId, certId),
   exportViewOnly: (opts) => ipcRenderer.invoke('export:view', opts),
   openPath: (p) => ipcRenderer.invoke('open:path', p),
   openUrl: (u) => ipcRenderer.invoke('open:url', u),
