@@ -275,7 +275,11 @@ app.whenReady().then(async () => {
 
   // first-run work in the background
   win.webContents.once('did-finish-load', async () => {
-    if (ebayReady(DB.settings)) { await updateAllPrices(); win.webContents.send('db-changed'); }
+    if (ebayReady(DB.settings)) {
+      // once a day is plenty: skip if the last successful update was under 24 hours ago (Refresh all values still forces one)
+      const last = Date.parse(DB.settings.pricesUpdatedAt || 0) || 0;
+      if (Date.now() - last >= 24 * 3600 * 1000) { await updateAllPrices(); win.webContents.send('db-changed'); }
+    }
     else if (DB.items.some((i) => !i.current)) { await refreshPrices(); win.webContents.send('db-changed'); }
     cacheAll(win);
   });
