@@ -59,6 +59,7 @@
   async function refreshValues(ids) {
     const t0 = Date.now() - 1000;
     DB = await API.refreshPrices(ids);
+    priceProgress = null; updatePill();
     if (!ids && DB.settings.priceProvider === 'ebay' && DB.settings.ebayAppId && DB.settings.ebayCertId) {
       const pe = DB.settings.pricesError;
       if (pe && Date.parse(pe.at) >= t0) toast('Couldn’t update values, so the previous ones are kept: ' + pe.message, 7000);
@@ -73,11 +74,12 @@
   // thin progress bar under the header while values update from eBay
   function priceBar(p) {
     let bar = document.getElementById('pricebar');
-    if (!bar) { bar = document.createElement('div'); bar.id = 'pricebar'; bar.innerHTML = '<div class="fill"></div><div class="lbl"></div>'; document.body.appendChild(bar); }
+    if (!bar) { bar = document.createElement('div'); bar.id = 'pricebar'; bar.innerHTML = '<div class="fill"></div>'; document.body.appendChild(bar); }
     const running = p.done < p.total && !p.failed;
     bar.classList.toggle('show', running);
     bar.querySelector('.fill').style.width = (p.total ? (p.done / p.total) * 100 : 0) + '%';
-    bar.querySelector('.lbl').textContent = `Updating values from eBay · ${p.done}/${p.total}`;
+    priceProgress = running ? { done: p.done, total: p.total } : null;
+    updatePill();
     if (!running && p.failed) toast('Couldn’t update values, so the previous ones are kept: ' + p.failed, 7000);
   }
   function toast(msg, ms = 2600) {
@@ -113,10 +115,20 @@
     let html = tabs.map(([h, l, on]) => `<a href="${h}" class="${on ? 'active' : ''}">${l}</a>`).join('');
     if (!VIEW) html += `<a href="#/add" class="add ${route === 'add' ? 'active' : ''}">+ Add kit</a>`;
     document.getElementById('tabs').innerHTML = html;
-    document.getElementById('mode-pill').textContent = VIEW && !SNAP ? 'VIEW MODE · PREVIEW' : VIEW
+    updatePill();
+  }
+  let priceProgress = null;   // { done, total } while values are updating from eBay
+  function updatePill() {
+    const pill = document.getElementById('mode-pill');
+    if (!VIEW && priceProgress) {
+      pill.textContent = `UPDATING VALUES · ${priceProgress.done}/${priceProgress.total}`;
+      pill.title = ''; pill.classList.remove('pill-warn'); pill.classList.add('pill-busy'); return;
+    }
+    pill.classList.remove('pill-busy');
+    pill.textContent = VIEW && !SNAP ? 'VIEW MODE · PREVIEW' : VIEW
       ? 'VIEW ONLY · ' + (DB.exported ? new Date(DB.exported).toLocaleDateString('en-GB') : '')
       : (DB.settings.priceProvider === 'ebay' ? 'LIVE · eBay UK' + liveStamp() : 'PRICES: DUMMY DATA');
-    const pe = DB.settings.pricesError, pill = document.getElementById('mode-pill');
+    const pe = DB.settings.pricesError;
     pill.title = !VIEW && DB.settings.priceProvider === 'ebay' && pe ? `Last update failed (${new Date(pe.at).toLocaleString('en-GB')}): ${pe.message}` : '';
     pill.classList.toggle('pill-warn', !VIEW && DB.settings.priceProvider === 'ebay' && !!pe);
   }
