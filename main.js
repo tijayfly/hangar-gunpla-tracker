@@ -218,6 +218,11 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('db:get', () => DB);
   ipcMain.handle('db:paths', () => ({ data: DATA_DIR, view: VIEW_DIR }));
+  // Windows/Electron bug: after a native dialog, text fields can stop accepting clicks until the window
+  // is refocused. Every dialog goes through these wrappers, which hand focus back to the page afterwards.
+  const refocus = () => setTimeout(() => { if (!win.isDestroyed()) { win.blur(); win.focus(); win.webContents.focus(); } }, 60);
+  const messageBox = async (opts) => { try { return await dialog.showMessageBox(win, opts); } finally { refocus(); } };
+  const openDialog = async (opts) => { try { return await dialog.showOpenDialog(win, opts); } finally { refocus(); } };
   // anything that changes what the catalogue shows is stamped, so closing can offer to publish
   const markChanged = () => { DB.settings.contentChangedAt = new Date().toISOString(); };
   ipcMain.handle('item:save', (_e, item) => {
@@ -227,7 +232,7 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle('item:delete', async (_e, id) => {
     const it = DB.items.find((x) => x.id === id);
-    const { response } = await dialog.showMessageBox(win, { type: 'warning', buttons: ['Delete', 'Cancel'], defaultId: 1, cancelId: 1, message: `Delete "${it ? it.title : id}"?`, detail: 'This removes the entry from your collection. A backup of the previous data file is kept as collection.json.bak.' });
+    const { response } = await messageBox({ type: 'warning', buttons: ['Delete', 'Cancel'], defaultId: 1, cancelId: 1, message: `Delete "${it ? it.title : id}"?`, detail: 'This removes the entry from your collection. A backup of the previous data file is kept as collection.json.bak.' });
     if (response !== 0) return false;
     DB.items = DB.items.filter((x) => x.id !== id); markChanged(); saveDB(DB); return true;
   });
@@ -242,7 +247,7 @@ app.whenReady().then(async () => {
     await cacheImage(it); markChanged(); saveDB(DB); return it;
   });
   ipcMain.handle('image:file', async (_e, id) => {
-    const r = await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif'] }] });
+    const r = await openDialog({ properties: ['openFile'], filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif'] }] });
     if (r.canceled || !r.filePaths[0]) return null;
     const it = DB.items.find((x) => x.id === id); if (!it) return null;
     const ext = path.extname(r.filePaths[0]).toLowerCase() || '.jpg';
@@ -283,7 +288,7 @@ app.whenReady().then(async () => {
     const changed = s.contentChangedAt && (!s.githubLast || Date.parse(s.contentChangedAt) > Date.parse(s.githubLast.at));
     if (!ghReady || !changed) return;
     e.preventDefault();
-    const { response } = await dialog.showMessageBox(win, {
+    const { response } = await messageBox({
       type: 'question', buttons: ['Publish and close', 'Close without publishing', 'Cancel'], defaultId: 0, cancelId: 2, noLink: true,
       message: 'Publish your updated catalogue?',
       detail: `You've added or changed kits since the catalogue was last published to ${s.githubRepo.trim()}. Publish a new version to GitHub Pages before closing?`,
@@ -292,7 +297,7 @@ app.whenReady().then(async () => {
     if (response === 0) {
       const r = await exportAndPublish(true);
       if (r.publishError) {
-        const { response: again } = await dialog.showMessageBox(win, { type: 'warning', buttons: ['Close anyway', 'Cancel'], defaultId: 1, cancelId: 1, noLink: true, message: 'Couldn’t publish the catalogue', detail: r.publishError });
+        const { response: again } = await messageBox({ type: 'warning', buttons: ['Close anyway', 'Cancel'], defaultId: 1, cancelId: 1, noLink: true, message: 'Couldn’t publish the catalogue', detail: r.publishError });
         if (again !== 0) return;
       }
     }
