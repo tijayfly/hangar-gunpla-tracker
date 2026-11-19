@@ -14,7 +14,7 @@ Unofficial fan-made tool, not affiliated with Bandai.
 - Light and dark mode, and a phone-friendly layout for the exported page.
 
 ## Download (Windows)
-Grab **HANGAR-1.0.1-portable.exe** from the [latest release](https://github.com/tijayfly/hangar-gunpla-tracker/releases/latest). There's nothing to install: put it in its own folder and run it. Windows SmartScreen may warn because the app isn't code-signed; click **More info → Run anyway**.
+Grab **HANGAR-1.0.2-portable.exe** from the [latest release](https://github.com/tijayfly/hangar-gunpla-tracker/releases/latest). There's nothing to install: put it in its own folder and run it. Windows SmartScreen may warn because the app isn't code-signed; click **More info → Run anyway**.
 
 ## Run from source
 You need [Node.js](https://nodejs.org) (LTS).

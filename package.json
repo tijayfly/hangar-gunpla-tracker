@@ -1,7 +1,7 @@
 {
   "name": "hangar-gunpla-tracker",
   "productName": "HANGAR",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "HANGAR: a local Gunpla collection tracker (Electron)",
   "main": "main.js",
   "author": "TiJayFLY",
