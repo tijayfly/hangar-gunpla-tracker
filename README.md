@@ -43,6 +43,8 @@ To get Production keys, eBay asks you to handle Marketplace Account Deletion not
 2. Create a fine-grained personal access token limited to that repo with **Contents: Read and write**.
 3. In HANGAR: Settings → View-only page → enter `owner/repo` and the token, then **Publish now** (or tick "Also publish every time I export").
 
+When GitHub publishing is set up, closing HANGAR after adding or changing kits asks whether to publish an updated catalogue first.
+
 Only HANGAR's own files (index.html, data.js, app.js, match.js, styles.css, theme.js, logo.svg, .nojekyll, images/) are changed in that repo. The token is stored only in your local `hangar-data/collection.json`.
 
 ## Notes

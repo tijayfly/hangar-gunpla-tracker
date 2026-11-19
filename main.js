@@ -218,18 +218,20 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('db:get', () => DB);
   ipcMain.handle('db:paths', () => ({ data: DATA_DIR, view: VIEW_DIR }));
+  // anything that changes what the catalogue shows is stamped, so closing can offer to publish
+  const markChanged = () => { DB.settings.contentChangedAt = new Date().toISOString(); };
   ipcMain.handle('item:save', (_e, item) => {
     const i = DB.items.findIndex((x) => x.id === item.id);
     if (i >= 0) DB.items[i] = item; else DB.items.push(item);
-    saveDB(DB); return item;
+    markChanged(); saveDB(DB); return item;
   });
   ipcMain.handle('item:delete', async (_e, id) => {
     const it = DB.items.find((x) => x.id === id);
     const { response } = await dialog.showMessageBox(win, { type: 'warning', buttons: ['Delete', 'Cancel'], defaultId: 1, cancelId: 1, message: `Delete "${it ? it.title : id}"?`, detail: 'This removes the entry from your collection. A backup of the previous data file is kept as collection.json.bak.' });
     if (response !== 0) return false;
-    DB.items = DB.items.filter((x) => x.id !== id); saveDB(DB); return true;
+    DB.items = DB.items.filter((x) => x.id !== id); markChanged(); saveDB(DB); return true;
   });
-  ipcMain.handle('item:remove', (_e, id) => { DB.items = DB.items.filter((x) => x.id !== id); saveDB(DB); return true; });
+  ipcMain.handle('item:remove', (_e, id) => { DB.items = DB.items.filter((x) => x.id !== id); markChanged(); saveDB(DB); return true; });
   ipcMain.handle('settings:save', (_e, s) => { DB.settings = { ...DB.settings, ...s }; saveDB(DB); return DB.settings; });
   ipcMain.handle('lookup:name', (_e, name) => Lookup.autofill(name));
   ipcMain.handle('lookup:images', (_e, q) => Lookup.imageSearch(q));
@@ -237,7 +239,7 @@ app.whenReady().then(async () => {
     const it = DB.items.find((x) => x.id === id); if (!it) return null;
     it.image = { url: img.u || img.url, thumb: img.th || img.thumb || null, title: img.t || img.title || '', local: null };
     it.imageReview = false;
-    await cacheImage(it); saveDB(DB); return it;
+    await cacheImage(it); markChanged(); saveDB(DB); return it;
   });
   ipcMain.handle('image:file', async (_e, id) => {
     const r = await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif'] }] });
@@ -248,15 +250,15 @@ app.whenReady().then(async () => {
     fs.mkdirSync(IMG_DIR, { recursive: true });
     fs.copyFileSync(r.filePaths[0], path.join(IMG_DIR, name));
     it.image = { url: null, thumb: null, title: 'Own photo', local: 'images/' + name, own: true };
-    it.imageReview = false; saveDB(DB); return it;
+    it.imageReview = false; markChanged(); saveDB(DB); return it;
   });
   ipcMain.handle('images:cacheAll', () => cacheAll(win));
   ipcMain.handle('prices:refresh', async (_e, ids) => { if (!ids && ebayReady(DB.settings)) await updateAllPrices(); else await refreshPrices(ids); return DB; });
   ipcMain.handle('ebay:test', (_e, appId, certId) => Prices.testEbayKeys(appId, certId));
-  ipcMain.handle('export:view', async (_e, opts = {}) => {
+  async function exportAndPublish(publish) {
     const r = exportViewOnly();
     const s = DB.settings;
-    if (opts.publish ?? s.githubPublish) {
+    if (publish) {
       if (!s.githubToken || !s.githubRepo) { r.publishError = 'Add a GitHub repo and token in Settings first.'; return r; }
       try {
         r.github = await GitHub.publish({
@@ -269,6 +271,32 @@ app.whenReady().then(async () => {
       win && !win.isDestroyed() && win.webContents.send('progress', { kind: 'github', done: 1, total: 1 });
     }
     return r;
+  }
+  ipcMain.handle('export:view', (_e, opts = {}) => exportAndPublish(opts.publish ?? DB.settings.githubPublish));
+
+  // closing: if the collection changed since the catalogue was last published, offer to publish it first
+  let closing = false;
+  win.on('close', async (e) => {
+    if (closing || process.env.HANGAR_SHOTS) return;
+    const s = DB.settings;
+    const ghReady = (s.githubRepo || '').trim() && (s.githubToken || '').trim();
+    const changed = s.contentChangedAt && (!s.githubLast || Date.parse(s.contentChangedAt) > Date.parse(s.githubLast.at));
+    if (!ghReady || !changed) return;
+    e.preventDefault();
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'question', buttons: ['Publish and close', 'Close without publishing', 'Cancel'], defaultId: 0, cancelId: 2, noLink: true,
+      message: 'Publish your updated catalogue?',
+      detail: `You've added or changed kits since the catalogue was last published to ${s.githubRepo.trim()}. Publish a new version to GitHub Pages before closing?`,
+    });
+    if (response === 2) return;
+    if (response === 0) {
+      const r = await exportAndPublish(true);
+      if (r.publishError) {
+        const { response: again } = await dialog.showMessageBox(win, { type: 'warning', buttons: ['Close anyway', 'Cancel'], defaultId: 1, cancelId: 1, noLink: true, message: 'Couldn’t publish the catalogue', detail: r.publishError });
+        if (again !== 0) return;
+      }
+    }
+    closing = true; win.close();
   });
   ipcMain.handle('open:path', (_e, p) => shell.openPath(p));
   ipcMain.handle('open:url', (_e, u) => shell.openExternal(u));
