@@ -104,6 +104,43 @@ async function refreshPrices(ids) {
   }
   saveDB(DB);
 }
+// Update every value from eBay in one go. All or nothing: if anything goes wrong, nothing changes
+// (old values and the old "last updated" time stay). Skipped when eBay isn't set up.
+const ebayReady = (s) => s.priceProvider === 'ebay' && (s.ebayAppId || '').trim() && (s.ebayCertId || '').trim();
+let updating = null;
+function updateAllPrices() {
+  if (updating) return updating;
+  updating = (async () => {
+    const s = DB.settings;
+    if (!ebayReady(s)) return { ok: false, skipped: true };
+    const items = DB.items.slice();
+    const send = (m) => { for (const w of BrowserWindow.getAllWindows()) if (w !== searchWin && !w.isDestroyed()) w.webContents.send('progress', { kind: 'prices', ...m }); };
+    const results = new Map();
+    try {
+      for (let n = 0; n < items.length; n++) {
+        send({ done: n, total: items.length });
+        results.set(items[n].id, await Prices.getCurrentPrice(items[n], s));
+      }
+    } catch (e) {
+      s.pricesError = { message: String(e.message || e), at: new Date().toISOString() };
+      saveDB(DB);
+      send({ done: items.length, total: items.length, failed: s.pricesError.message });
+      return { ok: false, error: s.pricesError.message };
+    }
+    for (const it of items) {
+      const p = results.get(it.id);
+      if (!p) continue;
+      if (p.gbp == null && it.current && it.current.gbp != null) continue;   // too few listings: keep the previous value
+      it.current = p;
+    }
+    s.pricesUpdatedAt = new Date().toISOString(); delete s.pricesError;
+    saveDB(DB);
+    send({ done: items.length, total: items.length });
+    return { ok: true };
+  })().finally(() => { updating = null; });
+  return updating;
+}
+
 // ---------- view-only export ----------
 const PRICE_FIELDS = ['paid', 'gift', 'current', 'targetPrice', 'whereToBuy', 'imageCandidates', 'original'];
 function exportViewOnly() {
@@ -214,7 +251,7 @@ app.whenReady().then(async () => {
     it.imageReview = false; saveDB(DB); return it;
   });
   ipcMain.handle('images:cacheAll', () => cacheAll(win));
-  ipcMain.handle('prices:refresh', async (_e, ids) => { await refreshPrices(ids); return DB; });
+  ipcMain.handle('prices:refresh', async (_e, ids) => { if (!ids && ebayReady(DB.settings)) await updateAllPrices(); else await refreshPrices(ids); return DB; });
   ipcMain.handle('ebay:test', (_e, appId, certId) => Prices.testEbayKeys(appId, certId));
   ipcMain.handle('export:view', async (_e, opts = {}) => {
     const r = exportViewOnly();
@@ -238,7 +275,8 @@ app.whenReady().then(async () => {
 
   // first-run work in the background
   win.webContents.once('did-finish-load', async () => {
-    if (DB.items.some((i) => !i.current)) { await refreshPrices(); win.webContents.send('db-changed'); }
+    if (ebayReady(DB.settings)) { await updateAllPrices(); win.webContents.send('db-changed'); }
+    else if (DB.items.some((i) => !i.current)) { await refreshPrices(); win.webContents.send('db-changed'); }
     cacheAll(win);
   });
 });

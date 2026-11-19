@@ -34,7 +34,7 @@ To build a portable Windows .exe: `npm run dist` (output in `dist/`).
 - The first launch starts you with a few **example kits** (`data/seed-collection.json`). Delete them from each kit's page, or replace the seed file with your own before first launch.
 
 ## Current values
-Current values are **dummy placeholders** by default (derived from the price paid), so the app is usable out of the box. There's an eBay UK option in Settings (median asking price of new Buy It Now listings) that needs your own eBay developer **Production** App ID and Cert ID. **Test eBay keys** in Settings checks them, and if a refresh fails, the kit keeps its last value and shows the reason.
+Current values are **dummy placeholders** by default (derived from the price paid), so the app is usable out of the box. There's an eBay UK option in Settings (median asking price of new Buy It Now listings) that needs your own eBay developer **Production** App ID and Cert ID. **Test eBay keys** in Settings checks them. With keys set, all values update from eBay each time the app opens, with a progress bar, and the header shows when they were last updated. If anything goes wrong during an update, nothing changes: the previous values and update time are kept and the header shows ⚠ with the reason.
 
 To get Production keys, eBay asks you to handle Marketplace Account Deletion notifications. HANGAR stores no eBay user data, so choose the exemption ("not persisting eBay data") rather than setting up an endpoint.
 

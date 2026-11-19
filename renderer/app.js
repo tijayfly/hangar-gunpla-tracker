@@ -47,14 +47,38 @@
     if (el.dataset.fallback && el.src !== el.dataset.fallback) { el.src = el.dataset.fallback; delete el.dataset.fallback; return; }
     if (!el.dataset.dead) { el.dataset.dead = 1; el.replaceWith(Object.assign(document.createElement('div'), { className: 'noimg', innerHTML: ICON.camera + 'Photo unavailable' })); }
   }, true);
+  // "· Last updated 19 Nov, 18:02" for the live-pricing pill
+  function liveStamp() {
+    const u = DB.settings.pricesUpdatedAt;
+    if (!u) return ' · Not updated yet';
+    const d = new Date(u), today = new Date().toDateString() === d.toDateString();
+    const hm = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    return ' · Updated ' + (today ? hm : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + ' ' + hm);
+  }
   // refresh values and say plainly if eBay failed
   async function refreshValues(ids) {
     const t0 = Date.now() - 1000;
     DB = await API.refreshPrices(ids);
+    if (!ids && DB.settings.priceProvider === 'ebay' && DB.settings.ebayAppId && DB.settings.ebayCertId) {
+      const pe = DB.settings.pricesError;
+      if (pe && Date.parse(pe.at) >= t0) toast('Couldn’t update values, so the previous ones are kept: ' + pe.message, 7000);
+      else toast('Values updated');
+      return;
+    }
     const scope = DB.items.filter((i) => !ids || ids.includes(i.id));
     const failed = scope.filter((i) => i.current && i.current.error && Date.parse(i.current.errorAt || 0) >= t0);
     if (!failed.length) toast(ids && ids.length === 1 ? 'Value refreshed' : 'Values refreshed');
     else toast((ids && ids.length === 1 ? 'Couldn’t refresh: ' : `Couldn’t refresh ${failed.length} of ${scope.length} kits: `) + failed[0].current.error, 7000);
+  }
+  // thin progress bar under the header while values update from eBay
+  function priceBar(p) {
+    let bar = document.getElementById('pricebar');
+    if (!bar) { bar = document.createElement('div'); bar.id = 'pricebar'; bar.innerHTML = '<div class="fill"></div><div class="lbl"></div>'; document.body.appendChild(bar); }
+    const running = p.done < p.total && !p.failed;
+    bar.classList.toggle('show', running);
+    bar.querySelector('.fill').style.width = (p.total ? (p.done / p.total) * 100 : 0) + '%';
+    bar.querySelector('.lbl').textContent = `Updating values from eBay · ${p.done}/${p.total}`;
+    if (!running && p.failed) toast('Couldn’t update values, so the previous ones are kept: ' + p.failed, 7000);
   }
   function toast(msg, ms = 2600) {
     const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; document.body.appendChild(t);
@@ -91,7 +115,10 @@
     document.getElementById('tabs').innerHTML = html;
     document.getElementById('mode-pill').textContent = VIEW && !SNAP ? 'VIEW MODE · PREVIEW' : VIEW
       ? 'VIEW ONLY · ' + (DB.exported ? new Date(DB.exported).toLocaleDateString('en-GB') : '')
-      : (DB.settings.priceProvider === 'ebay' ? 'LIVE · eBay UK' : 'PRICES: DUMMY DATA');
+      : (DB.settings.priceProvider === 'ebay' ? 'LIVE · eBay UK' + liveStamp() : 'PRICES: DUMMY DATA');
+    const pe = DB.settings.pricesError, pill = document.getElementById('mode-pill');
+    pill.title = !VIEW && DB.settings.priceProvider === 'ebay' && pe ? `Last update failed (${new Date(pe.at).toLocaleString('en-GB')}): ${pe.message}` : '';
+    pill.classList.toggle('pill-warn', !VIEW && DB.settings.priceProvider === 'ebay' && !!pe);
   }
 
   // ---------- list views ----------
@@ -584,7 +611,10 @@
     else {
       DB = await API.getDB();
       API.on('db-changed', async () => { DB = await API.getDB(); if (!document.querySelector('.modal-bg') && !document.getElementById('rf') && !document.getElementById('ef')) route(); });
-      API.on('progress', (p) => { const el = document.getElementById('progress'); el.textContent = p.done < p.total ? (p.kind === 'github' ? `Uploading to GitHub ${p.done}/${p.total}` : `Downloading photos ${p.done}/${p.total}`) : ''; });
+      API.on('progress', (p) => {
+        if (p.kind === 'prices') { priceBar(p); return; }
+        const el = document.getElementById('progress'); el.textContent = p.done < p.total ? (p.kind === 'github' ? `Uploading to GitHub ${p.done}/${p.total}` : `Downloading photos ${p.done}/${p.total}`) : '';
+      });
     }
     DB.items = DB.items.filter((i) => i.list === 'collection' || i.list === 'wishlist');
     window.addEventListener('hashchange', route);
